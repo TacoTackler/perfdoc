@@ -125,17 +125,17 @@ bool Instance::init(VkInstance instance_, VkLayerInstanceDispatchTable *pTable_,
 	VkDebugReportCallbackCreateInfoEXT ci = {};
 
 #ifdef ANDROID
-	auto configPath = getSystemProperty("debug.mali.perfdoc.config");
+	auto configPath = getSystemProperty("debug.powervr.perfdoc.config");
 	const char *path = configPath.empty() ? nullptr : configPath.c_str();
-	auto logFilename = getSystemProperty("debug.mali.perfdoc.log");
+	auto logFilename = getSystemProperty("debug.powervr.perfdoc.log");
 #else
-	const char *path = getenv("MALI_PERFDOC_CONFIG");
+	const char *path = getenv("POWERVR_PERFDOC_CONFIG");
 	if (!path)
-		path = "mali-perfdoc.cfg";
-	const char *logFilename = getenv("MALI_PERFDOC_LOG");
+		path = "powervr-perfdoc.cfg";
+	const char *logFilename = getenv("POWERVR_PERFDOC_LOG");
 #endif
 
-	const char *dumpPath = getenv("MALI_PERFDOC_CONFIG_DUMP");
+	const char *dumpPath = getenv("POWERVR_PERFDOC_CONFIG_DUMP");
 	if (dumpPath)
 		cfg.dumpToFile(dumpPath);
 
@@ -144,7 +144,7 @@ bool Instance::init(VkInstance instance_, VkLayerInstanceDispatchTable *pTable_,
 		if (!cfg.tryToLoadFromFile(path))
 		{
 #ifdef ANDROID
-			__android_log_print(ANDROID_LOG_ERROR, "MaliPerfDoc", "Failed to open PerfDoc config: %s.", path);
+			__android_log_print(ANDROID_LOG_ERROR, "PowerVRPerfDoc", "Failed to open PerfDoc config: %s.", path);
 #endif
 		}
 	}

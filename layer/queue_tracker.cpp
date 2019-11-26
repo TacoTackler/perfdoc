@@ -22,6 +22,7 @@
 #include "event.hpp"
 #include "message_codes.hpp"
 #include "queue.hpp"
+#include "device.hpp"
 #include <algorithm>
 
 using namespace std;
@@ -38,6 +39,9 @@ void QueueTracker::pushWork(Stage dstStage)
 	static const char *stageNames[STAGE_COUNT] = {
 		"COMPUTE", "GEOMETRY", "FRAGMENT", "TRANSFER",
 	};
+
+	
+	const auto &cfg = queue.getDevice()->getConfig();
 
 	for (unsigned i = 0; i < STAGE_COUNT; i++)
 	{
@@ -70,7 +74,9 @@ void QueueTracker::pushWork(Stage dstStage)
 		// TRANSFER work,
 		// TRANSFER -> FRAGMENT,
 		// is a bubble.
-		if (stages[i].waitList[dstStage] == stages[dstStage].index &&
+		if (
+		cfg.msgPipelineBubble && 
+		stages[i].waitList[dstStage] == stages[dstStage].index &&
 		    stages[i].index != stages[i].lastDstStageIndex[dstStage])
 		{
 			queue.log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_PIPELINE_BUBBLE,

@@ -97,7 +97,7 @@ cd ..
 
 day=$(date "+%Y-%m-%d")
 commit=$(git rev-parse HEAD | cut -b 1-10)
-zip mali-perfdoc-$day-$commit.zip \
+zip powervr-perfdoc-$day-$commit.zip \
 	README.md \
 	layer/perfdoc-default.cfg \
 	build-linux-x64/layer/*.{so,json} \

@@ -48,7 +48,11 @@ void RenderPass::checkMultisampling()
 			accessRequiresMemory |= attachment.stencilStoreOp == VK_ATTACHMENT_STORE_OP_STORE;
 		}
 
-		if (accessRequiresMemory)
+		const auto &cfg = this->getDevice()->getConfig();
+
+		if (
+		cfg.msgMultisampledImageRequiresMemory &&
+		accessRequiresMemory)
 		{
 			log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_MULTISAMPLED_IMAGE_REQUIRES_MEMORY,
 			    "Attachment %u in the VkRenderPass is a multisampled image with %u samples, but it uses loadOp/storeOp "

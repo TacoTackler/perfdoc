@@ -35,12 +35,14 @@ void DescriptorPool::descriptorSetCreated(DescriptorSet *dset)
 {
 	MPD_ASSERT(dset);
 
+	const auto &cfg = this->getDevice()->getConfig();
+
 	auto it = layoutInfos.find(dset->getLayoutUuid());
 	if (it != layoutInfos.end())
 	{
 		DescriptorSetLayoutInfo &inf = it->second;
 
-		if (inf.descriptorSetsFreedCount > 0)
+		if (cfg.msgDescriptorSetAllocationChecks && inf.descriptorSetsFreedCount > 0)
 		{
 			inf.descriptorSetsFreedCount = 0;
 			log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_DESCRIPTOR_SET_ALLOCATION_CHECKS,

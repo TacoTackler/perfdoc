@@ -69,7 +69,11 @@ void Framebuffer::checkPotentiallyTransient()
 			attachmentShouldBeTransient &= attachment.stencilLoadOp != VK_ATTACHMENT_LOAD_OP_LOAD &&
 			                               attachment.stencilStoreOp != VK_ATTACHMENT_STORE_OP_STORE;
 
-		if (attachmentShouldBeTransient && !imageIsTransient)
+		const auto &cfg = this->getDevice()->getConfig();
+
+		if (
+		cfg.msgFramebufferAttachmentShouldBeTransient &&
+		attachmentShouldBeTransient && !imageIsTransient)
 		{
 			log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_FRAMEBUFFER_ATTACHMENT_SHOULD_BE_TRANSIENT,
 			    "Attachment %u in VkFramebuffer uses loadOp/storeOps which never have to be backed by physical memory, "
@@ -77,7 +81,9 @@ void Framebuffer::checkPotentiallyTransient()
 			    "You can save physical memory by using transient attachment backed by lazily allocated memory here.",
 			    i);
 		}
-		else if (!attachmentShouldBeTransient && imageIsTransient)
+		else if (
+		cfg.msgFramebufferAttachmentShouldNotBeTransient &&
+		!attachmentShouldBeTransient && imageIsTransient)
 		{
 			log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
 			    MESSAGE_CODE_FRAMEBUFFER_ATTACHMENT_SHOULD_NOT_BE_TRANSIENT,

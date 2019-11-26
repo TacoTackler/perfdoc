@@ -1,4 +1,4 @@
-LIBRARY VkLayer_mali_perf_doc
+LIBRARY VkLayer_powervr_perf_doc
 EXPORTS
 vkGetInstanceProcAddr
 vkGetDeviceProcAddr

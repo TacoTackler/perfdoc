@@ -37,6 +37,8 @@ void Pipeline::checkWorkGroupSize(const VkComputePipelineCreateInfo &createInfo)
 {
 	auto *module = baseDevice->get<ShaderModule>(createInfo.stage.module);
 
+	const auto &cfg = this->getDevice()->getConfig();
+
 	try
 	{
 		Compiler comp(module->getCode());
@@ -53,8 +55,9 @@ void Pipeline::checkWorkGroupSize(const VkComputePipelineCreateInfo &createInfo)
 		uint32_t numThreads = x * y * z;
 
 		const uint32_t quadSize = baseDevice->getConfig().threadGroupSize;
-		if (numThreads == 1 || ((x > 1) && (x & (quadSize - 1))) || ((y > 1) && (y & (quadSize - 1))) ||
-		    ((z > 1) && (z & (quadSize - 1))))
+		if (cfg.msgComputeNoThreadGroupAlignment &&
+		    (numThreads == 1 || ((x > 1) && (x & (quadSize - 1))) || ((y > 1) && (y & (quadSize - 1))) ||
+		     ((z > 1) && (z & (quadSize - 1)))))
 		{
 			log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_COMPUTE_NO_THREAD_GROUP_ALIGNMENT,
 			    "The work group size (%u, %u, %u) has dimensions which are not aligned to %u threads. "
@@ -62,7 +65,7 @@ void Pipeline::checkWorkGroupSize(const VkComputePipelineCreateInfo &createInfo)
 			    x, y, z, quadSize, quadSize);
 		}
 
-		if ((x * y * z) > baseDevice->getConfig().maxEfficientWorkGroupThreads)
+		if (cfg.msgComputeLargeWorkGroup && (x * y * z) > baseDevice->getConfig().maxEfficientWorkGroupThreads)
 		{
 			log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_COMPUTE_LARGE_WORK_GROUP,
 			    "The work group size (%u, %u, %u) (%u threads) has more threads than advised. "
@@ -110,7 +113,7 @@ void Pipeline::checkWorkGroupSize(const VkComputePipelineCreateInfo &createInfo)
 		for (auto &image : resources.separate_images)
 			check_image(image);
 
-		if (accesses_2d && dimensions < 2)
+		if (cfg.msgComputePoorSpatialLocality && accesses_2d && dimensions < 2)
 		{
 			log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_COMPUTE_POOR_SPATIAL_LOCALITY,
 			    "The compute shader has a work group size of (%u, %u, %u), which suggests a 1D dispatch, "
@@ -204,18 +207,24 @@ void Pipeline::checkPushConstantsForStage(const VkPipelineShaderStageCreateInfo 
 			}
 		}
 
-		for (auto &potential : potentials)
+		const auto &cfg = this->getDevice()->getConfig();
+
+		if (cfg.msgPotentialPushConstant)
 		{
-			module->log(
-			    VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_POTENTIAL_PUSH_CONSTANT,
-			    "Identified static access to a UBO block (%s, ID: %u) member (%s, index: %u, offset: %u, range: %u). "
-			    "This data should be considered for a push constant block which would enable more efficient access to "
-			    "this data.",
-			    potential.blockName.c_str(), potential.uboID, potential.memberName.c_str(), potential.index,
-			    potential.offset, potential.range);
+			for (auto &potential : potentials)
+			{
+				module->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_POTENTIAL_PUSH_CONSTANT,
+				            "Identified static access to a UBO block (%s, ID: %u) member (%s, index: %u, offset: %u, "
+				            "range: %u). "
+				            "This data should be considered for a push constant block which would enable more "
+				            "efficient access to "
+				            "this data.",
+				            potential.blockName.c_str(), potential.uboID, potential.memberName.c_str(), potential.index,
+				            potential.offset, potential.range);
+			}
 		}
 
-		if (totalPushConstantSize)
+		if (cfg.msgPotentialPushConstant && totalPushConstantSize)
 		{
 			module->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_POTENTIAL_PUSH_CONSTANT,
 			            "Identified a total of %u bytes of UBO data which could potentially be push constant.",
@@ -249,7 +258,9 @@ void Pipeline::checkInstancedVertexBuffer(const VkGraphicsPipelineCreateInfo &cr
 		if (vertexInput.pVertexBindingDescriptions[i].inputRate == VK_VERTEX_INPUT_RATE_INSTANCE)
 			count++;
 
-	if (count > baseDevice->getConfig().maxInstancedVertexBuffers)
+	const auto &cfg = this->getDevice()->getConfig();
+
+	if (cfg.msgTooManyInstancedVertexBuffers && count > baseDevice->getConfig().maxInstancedVertexBuffers)
 	{
 		log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_TOO_MANY_INSTANCED_VERTEX_BUFFERS,
 		    "The pipeline is using %u instanced vertex buffers (current limit: %u), but this can be inefficient on the "
@@ -278,6 +289,8 @@ void Pipeline::checkMultisampledBlending(const VkGraphicsPipelineCreateInfo &cre
 	MPD_ASSERT(createInfo.subpass < info.subpassCount);
 	auto &subpass = info.pSubpasses[createInfo.subpass];
 
+	const auto &cfg = this->getDevice()->getConfig();
+
 	for (uint32_t i = 0; i < createInfo.pColorBlendState->attachmentCount; i++)
 	{
 		auto &att = createInfo.pColorBlendState->pAttachments[i];
@@ -286,7 +299,9 @@ void Pipeline::checkMultisampledBlending(const VkGraphicsPipelineCreateInfo &cre
 		if (attachment != VK_ATTACHMENT_UNUSED && att.blendEnable && att.colorWriteMask)
 		{
 			MPD_ASSERT(attachment < info.attachmentCount);
-			if (!formatHasFullThroughputBlending(info.pAttachments[attachment].format))
+			//works fine on PowerVR
+			if (cfg.msgNotFullThroughputBlending &&
+			    !formatHasFullThroughputBlending(info.pAttachments[attachment].format))
 			{
 				log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_NOT_FULL_THROUGHPUT_BLENDING,
 				    "Pipeline is multisampled and color attachment #%u makes use of a format which cannot be blended "
@@ -307,8 +322,15 @@ VkResult Pipeline::initGraphics(VkPipeline pipeline_, const VkGraphicsPipelineCr
 
 	this->createInfo.graphics = createInfo;
 
-	depthStencilState = *createInfo.pDepthStencilState;
-	inputAssemblyState = *createInfo.pInputAssemblyState;
+	if (createInfo.pDepthStencilState)
+	{
+		depthStencilState = *createInfo.pDepthStencilState;
+	}
+
+	if (createInfo.pInputAssemblyState)
+	{
+		inputAssemblyState = *createInfo.pInputAssemblyState;
+	}
 	this->createInfo.graphics.pDepthStencilState = &depthStencilState;
 	this->createInfo.graphics.pInputAssemblyState = &inputAssemblyState;
 
@@ -333,4 +355,4 @@ VkResult Pipeline::initGraphics(VkPipeline pipeline_, const VkGraphicsPipelineCr
 		checkPushConstantsForStage(createInfo.pStages[i]);
 	return VK_SUCCESS;
 }
-}
+} // namespace MPD

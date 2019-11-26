@@ -27,9 +27,12 @@ namespace MPD
 
 void Sampler::checkIdenticalWrapping()
 {
+	const auto &cfg = this->getDevice()->getConfig();
+
 	bool differentAddress =
 	    (createInfo.addressModeU != createInfo.addressModeV) || (createInfo.addressModeV != createInfo.addressModeW);
-	if (differentAddress)
+	//works fine on PowerVR
+	if (cfg.msgDissimilarWrapping && differentAddress)
 	{
 		log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_DISSIMILAR_WRAPPING,
 		    "Creating a sampler object with wrapping modes which do not match (U = %u, V = %u, W = %u). "
@@ -44,8 +47,11 @@ void Sampler::checkIdenticalWrapping()
 
 void Sampler::checkLodClamping()
 {
+	const auto &cfg = this->getDevice()->getConfig();
+
 	bool lodClamping = (createInfo.minLod != 0.0f) || (createInfo.maxLod < baseDevice->getConfig().unclampedMaxLod);
-	if (lodClamping)
+	//works fine on PowerVR
+	if (cfg.msgSamplerLodClamping && lodClamping)
 	{
 		log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_SAMPLER_LOD_CLAMPING,
 		    "Creating a sampler object with LOD clamping (minLod = %f, maxLod = %f). "
@@ -59,8 +65,11 @@ void Sampler::checkLodClamping()
 
 void Sampler::checkLodBias()
 {
+	const auto &cfg = this->getDevice()->getConfig();
+
 	bool lodBias = createInfo.mipLodBias != 0.0f;
-	if (lodBias)
+	//works fine on PowerVR
+	if (cfg.msgSamplerLodBias && lodBias)
 	{
 		log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_SAMPLER_LOD_BIAS,
 		    "Creating a sampler object with LOD bias != 0.0 (%f). "
@@ -72,11 +81,14 @@ void Sampler::checkLodBias()
 
 void Sampler::checkBorderClamp()
 {
+	const auto &cfg = this->getDevice()->getConfig();
+
 	if (createInfo.addressModeU == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER ||
 	    createInfo.addressModeV == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER ||
 	    createInfo.addressModeW == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER)
 	{
-		if (createInfo.borderColor != VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK)
+		//works fine on PowerVR
+		if (cfg.msgSamplerBorderClampColor && createInfo.borderColor != VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK)
 		{
 			log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_SAMPLER_BORDER_CLAMP_COLOR,
 			    "Creating a sampler object with border clamping and borderColor != "
@@ -90,7 +102,10 @@ void Sampler::checkBorderClamp()
 
 void Sampler::checkUnnormalizedCoords()
 {
-	if (createInfo.unnormalizedCoordinates)
+	const auto &cfg = this->getDevice()->getConfig();
+
+	//works fine on PowerVR
+	if (cfg.msgSamplerUnnormalizedCoords && createInfo.unnormalizedCoordinates)
 	{
 		log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_SAMPLER_UNNORMALIZED_COORDS,
 		    "Creating a sampler object with unnormalized coordinates. "
@@ -101,7 +116,9 @@ void Sampler::checkUnnormalizedCoords()
 
 void Sampler::checkAnisotropy()
 {
-	if (createInfo.anisotropyEnable)
+	const auto &cfg = this->getDevice()->getConfig();
+
+	if (cfg.msgSamplerAnisotropy && createInfo.anisotropyEnable)
 	{
 		log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_SAMPLER_ANISOTROPY,
 		    "Creating a sampler object with anisotropy. "

@@ -72,7 +72,7 @@ void Logger::write(const LoggerMessageInfo &inf, const char *msg)
 		if (u)
 		{
 			size_t location = 0;
-			cb->pfnCallback(u, inf.objectType, inf.object, location, inf.messageCode, "MaliPerfDoc", msg,
+			cb->pfnCallback(u, inf.objectType, inf.object, location, inf.messageCode, "PowerVRPerfDoc", msg,
 			                cb->pUserData);
 		}
 	}

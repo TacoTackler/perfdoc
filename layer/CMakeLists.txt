@@ -23,7 +23,7 @@ else()
 	set(export-file )
 endif()
 
-add_library(VkLayer_mali_perf_doc SHARED
+add_library(VkLayer_powervr_perf_doc SHARED
 		logger.cpp
 		config.cpp
 		base_object.cpp
@@ -52,42 +52,42 @@ add_library(VkLayer_mali_perf_doc SHARED
 		swapchain.cpp
 		heuristic.cpp
 		${export-file})
-target_include_directories(VkLayer_mali_perf_doc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(VkLayer_powervr_perf_doc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-target_compile_options(VkLayer_mali_perf_doc PUBLIC ${PERFDOC_CXX_FLAGS})
+target_compile_options(VkLayer_powervr_perf_doc PUBLIC ${PERFDOC_CXX_FLAGS})
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/layer)
 
 if (WIN32)
-	add_custom_command(TARGET VkLayer_mali_perf_doc POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/VkLayer_mali_perf_doc_win32.json ${CMAKE_BINARY_DIR}/layer/VkLayer_mali_perf_doc.json)
-	set_target_properties(VkLayer_mali_perf_doc PROPERTIES PREFIX "" LIBRARY_OUTPUT_NAME VkLayer_mali_perf_doc)
+	add_custom_command(TARGET VkLayer_powervr_perf_doc POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/VkLayer_powervr_perf_doc_win32.json ${CMAKE_BINARY_DIR}/layer/VkLayer_powervr_perf_doc.json)
+	set_target_properties(VkLayer_powervr_perf_doc PROPERTIES PREFIX "" LIBRARY_OUTPUT_NAME VkLayer_powervr_perf_doc)
 	if (CMAKE_COMPILER_IS_GNUCXX)
 		if (${CMAKE_BUILD_TYPE} MATCHES "Release")
-			set_target_properties(VkLayer_mali_perf_doc PROPERTIES LINK_FLAGS "-Wl,--no-undefined -static -s")
+			set_target_properties(VkLayer_powervr_perf_doc PROPERTIES LINK_FLAGS "-Wl,--no-undefined -static -s")
 		else()
-			set_target_properties(VkLayer_mali_perf_doc PROPERTIES LINK_FLAGS "-Wl,--no-undefined -static")
+			set_target_properties(VkLayer_powervr_perf_doc PROPERTIES LINK_FLAGS "-Wl,--no-undefined -static")
 		endif()
 	endif()
 else()
-	add_custom_command(TARGET VkLayer_mali_perf_doc POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/VkLayer_mali_perf_doc.json ${CMAKE_BINARY_DIR}/layer/VkLayer_mali_perf_doc.json)
+	add_custom_command(TARGET VkLayer_powervr_perf_doc POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/VkLayer_powervr_perf_doc.json ${CMAKE_BINARY_DIR}/layer/VkLayer_powervr_perf_doc.json)
 	if (${CMAKE_BUILD_TYPE} MATCHES "Release")
-		set_target_properties(VkLayer_mali_perf_doc PROPERTIES LINK_FLAGS "-Wl,--no-undefined -s")
+		set_target_properties(VkLayer_powervr_perf_doc PROPERTIES LINK_FLAGS "-Wl,--no-undefined -s")
 	else()
-		set_target_properties(VkLayer_mali_perf_doc PROPERTIES LINK_FLAGS "-Wl,--no-undefined")
+		set_target_properties(VkLayer_powervr_perf_doc PROPERTIES LINK_FLAGS "-Wl,--no-undefined")
 	endif()
 endif()
 
-set_target_properties(VkLayer_mali_perf_doc PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/layer")
-set_target_properties(VkLayer_mali_perf_doc PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/layer")
-set_target_properties(VkLayer_mali_perf_doc PROPERTIES RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_BINARY_DIR}/layer")
-set_target_properties(VkLayer_mali_perf_doc PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/layer")
+set_target_properties(VkLayer_powervr_perf_doc PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/layer")
+set_target_properties(VkLayer_powervr_perf_doc PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/layer")
+set_target_properties(VkLayer_powervr_perf_doc PROPERTIES RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_BINARY_DIR}/layer")
+set_target_properties(VkLayer_powervr_perf_doc PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/layer")
 
 add_subdirectory(SPIRV-Cross EXCLUDE_FROM_ALL)
 set_property(TARGET spirv-cross-core PROPERTY POSITION_INDEPENDENT_CODE TRUE)
-target_link_libraries(VkLayer_mali_perf_doc spirv-cross-core)
+target_link_libraries(VkLayer_powervr_perf_doc spirv-cross-core)
 
 if (ANDROID)
-	target_link_libraries(VkLayer_mali_perf_doc log)
+	target_link_libraries(VkLayer_powervr_perf_doc log)
 endif()

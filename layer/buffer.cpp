@@ -60,8 +60,12 @@ VkResult Buffer::bindMemory(DeviceMemory *memory_, VkDeviceSize offset)
 
 	auto memorySize = memory->getAllocateInfo().allocationSize;
 
+	const auto &cfg = this->getDevice()->getConfig();
+
 	// If we're consuming an entire memory block here, it better be a very large allocation.
-	if (memorySize == memoryRequirements.size && memorySize < baseDevice->getConfig().minDedicatedAllocationSize)
+	if (
+	cfg.msgSmallDedicatedAllocation &&
+	memorySize == memoryRequirements.size && memorySize < baseDevice->getConfig().minDedicatedAllocationSize)
 	{
 		// Sanity check.
 		MPD_ASSERT(offset == 0);

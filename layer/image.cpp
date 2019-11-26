@@ -35,8 +35,11 @@ VkResult Image::init(VkImage image_, const VkImageCreateInfo &createInfo_)
 	for (auto &layer : arrayLayers)
 		layer.mipLevels.resize(createInfo.mipLevels);
 
+	const auto &cfg = this->getDevice()->getConfig();
+
 	// Static casting here and compare is fine, the enum == its numeric value.
-	if (static_cast<uint32_t>(createInfo.samples) > baseDevice->getConfig().maxEfficientSamples)
+	if (cfg.msgTooLargeSampleCount &&
+	static_cast<uint32_t>(createInfo.samples) > baseDevice->getConfig().maxEfficientSamples)
 	{
 		log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_TOO_LARGE_SAMPLE_COUNT,
 		    "Trying to create an image with %u samples. "
@@ -45,14 +48,16 @@ VkResult Image::init(VkImage image_, const VkImageCreateInfo &createInfo_)
 	}
 
 	// If we're multisampling, always use a transient attachment.
-	if ((static_cast<uint32_t>(createInfo.samples) > 1) &&
+	if (
+	cfg.msgNonLazyMultisampledImage &&
+	(static_cast<uint32_t>(createInfo.samples) > 1) &&
 	    (createInfo.usage & VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT) == 0)
 	{
 		log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_NON_LAZY_MULTISAMPLED_IMAGE,
 		    "Trying to create a multisampled image, but createInfo.usage did not have "
 		    "VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT set. Multisampled images should be resolved on-chip, "
 		    "and do not need to be backed by physical storage. "
-		    "TRANSIENT_ATTACHMENT allows Mali to not back the multisampled image with physical memory.");
+		    "TRANSIENT_ATTACHMENT allows PowerVR to not back the multisampled image with physical memory.");
 	}
 
 	if (!swapchainImage)
@@ -66,6 +71,14 @@ Image::Usage Image::getLastUsage(uint32_t arrayLayer, uint32_t mipLevel) const
 	MPD_ASSERT(mipLevel < createInfo.mipLevels);
 	auto &resource = arrayLayers[arrayLayer].mipLevels[mipLevel];
 	return resource.lastUsage;
+}
+
+uint32_t Image::getUsageFlags(uint32_t arrayLayer, uint32_t mipLevel) const
+{
+	MPD_ASSERT(arrayLayer < createInfo.arrayLayers);
+	MPD_ASSERT(mipLevel < createInfo.mipLevels);
+	auto &resource = arrayLayers[arrayLayer].mipLevels[mipLevel];
+	return resource.usageFlags;
 }
 
 void Image::signalUsage(const VkImageSubresourceRange &range, Usage usage)
@@ -93,8 +106,10 @@ void Image::signalUsage(uint32_t arrayLayer, uint32_t mipLevel, Usage usage)
 {
 	auto oldUsage = getLastUsage(arrayLayer, mipLevel);
 
+	const auto &cfg = this->getDevice()->getConfig();
+
 	// Swapchain images are implicitly read so clear after store is expected.
-	if (usage == Usage::RenderPassCleared && oldUsage == Usage::RenderPassStored && !swapchainImage)
+	if (cfg.msgRedundantRenderpassStore && usage == Usage::RenderPassCleared && oldUsage == Usage::RenderPassStored && !swapchainImage)
 	{
 		log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_REDUNDANT_RENDERPASS_STORE,
 		    "Subresource (arrayLayer: %u, mipLevel: %u) of image was cleared as part of LOAD_OP_CLEAR, but last time "
@@ -103,7 +118,7 @@ void Image::signalUsage(uint32_t arrayLayer, uint32_t mipLevel, Usage usage)
 		    "architectures.",
 		    arrayLayer, mipLevel);
 	}
-	else if (usage == Usage::RenderPassCleared && oldUsage == Usage::Cleared)
+	else if (cfg.msgRedundantImageClear && usage == Usage::RenderPassCleared && oldUsage == Usage::Cleared)
 	{
 		log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_REDUNDANT_IMAGE_CLEAR,
 		    "Subresource (arrayLayer: %u, mipLevel: %u) of image was cleared as part of LOAD_OP_CLEAR, but last time "
@@ -112,7 +127,7 @@ void Image::signalUsage(uint32_t arrayLayer, uint32_t mipLevel, Usage usage)
 		    "tile-based architectures.",
 		    arrayLayer, mipLevel);
 	}
-	else if (usage == Usage::RenderPassReadToTile && oldUsage == Usage::Cleared)
+	else if (cfg.msgInefficientClear && usage == Usage::RenderPassReadToTile && oldUsage == Usage::Cleared)
 	{
 		log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_INEFFICIENT_CLEAR,
 		    "Subresource (arrayLayer: %u, mipLevel: %u) of image was loaded to tile as part of LOAD_OP_LOAD, but last "
@@ -124,6 +139,7 @@ void Image::signalUsage(uint32_t arrayLayer, uint32_t mipLevel, Usage usage)
 	}
 
 	arrayLayers[arrayLayer].mipLevels[mipLevel].lastUsage = usage;
+	arrayLayers[arrayLayer].mipLevels[mipLevel].usageFlags |= (uint32_t)usage;
 }
 
 VkResult Image::initSwapchain(VkImage image_, const VkImageCreateInfo &createInfo)
@@ -160,7 +176,11 @@ void Image::checkLazyAndTransient()
 
 		uint32_t allocatedProperties = memoryProperties.memoryTypes[memoryType].propertyFlags;
 
-		if (supportsLazy && (allocatedProperties & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) == 0)
+		const auto &cfg = this->getDevice()->getConfig();
+
+		if (
+		cfg.msgNonLazyTransientImage &&
+		supportsLazy && (allocatedProperties & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) == 0)
 		{
 			log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_NON_LAZY_TRANSIENT_IMAGE,
 			    "Attempting to bind memory type %u to VkImage which was created with TRANSIENT_ATTACHMENT_BIT, "
@@ -175,8 +195,12 @@ void Image::checkAllocationSize()
 {
 	auto memorySize = memory->getAllocateInfo().allocationSize;
 
+	const auto &cfg = this->getDevice()->getConfig();
+
 	// If we're consuming an entire memory block here, it better be a very large allocation.
-	if (memorySize == memoryRequirements.size && memorySize < baseDevice->getConfig().minDedicatedAllocationSize)
+	if (
+	cfg.msgSmallDedicatedAllocation &&
+	memorySize == memoryRequirements.size && memorySize < baseDevice->getConfig().minDedicatedAllocationSize)
 	{
 		// Sanity check.
 		MPD_ASSERT(memoryOffset == 0);

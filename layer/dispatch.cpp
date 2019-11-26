@@ -49,6 +49,8 @@
 #include "shader_module.hpp"
 #include "swapchain.hpp"
 
+#include "format.hpp"
+
 using namespace std;
 
 namespace MPD
@@ -131,6 +133,18 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice gpu, const V
 		}
 	}
 
+	if (pCreateInfo->pEnabledFeatures)
+	{
+		const auto &cfg = layer->getConfig();
+
+		if (cfg.msgRobustBufferAccessEnabled && pCreateInfo->pEnabledFeatures->robustBufferAccess)
+		{
+			device->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_ROBUST_BUFFER_ACCESS_ENABLED,
+			            "MESSAGE_CODE_ROBUST_BUFFER_ACCESS_ENABLED is set. Robust buffer access should only be set in "
+			            "debug or development builds, never in final release builds.");
+		}
+	}
+
 	return VK_SUCCESS;
 }
 
@@ -200,7 +214,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateCommandPool(VkDevice device, const V
 		}
 		else
 		{
-			if (pCreateInfo->flags & VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+			const auto &cfg = layer->getConfig();
+			if (cfg.msgCommandBufferReset && pCreateInfo->flags & VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
 			{
 				commandPool->log(
 				    VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_COMMAND_BUFFER_RESET,
@@ -291,9 +306,11 @@ static VKAPI_ATTR VkResult VKAPI_CALL BeginCommandBuffer(VkCommandBuffer command
 	{
 		pCommandBuffer->setCurrentRenderPass(layer->get<RenderPass>(pBeginInfo->pInheritanceInfo->renderPass));
 		pCommandBuffer->setCurrentSubpassIndex(pBeginInfo->pInheritanceInfo->subpass);
+		pCommandBuffer->setFramebuffer(pBeginInfo->pInheritanceInfo->framebuffer);
 	}
 
-	if (pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)
+	const auto &cfg = layer->getConfig();
+	if (cfg.msgCommandBufferSimultaneousUse && pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)
 	{
 		MPD_ASSERT(pCommandBuffer);
 		pCommandBuffer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_COMMAND_BUFFER_SIMULTANEOUS_USE,
@@ -644,6 +661,82 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateImage(VkDevice device, const VkImage
 			layer->getTable()->DestroyImage(device, *pImage, pCallbacks);
 		}
 	}
+
+	const auto &cfg = layer->getConfig();
+
+	if (cfg.msgSuboptimalTextureFormat)
+	{
+		switch (pCreateInfo->format)
+		{
+		case VK_FORMAT_B10G11R11_UFLOAT_PACK32:
+		case VK_FORMAT_R32_UINT:
+		case VK_FORMAT_R32_SINT:
+		case VK_FORMAT_R32_SFLOAT:
+		case VK_FORMAT_R32G32_UINT:
+		case VK_FORMAT_R32G32_SINT:
+		case VK_FORMAT_R32G32_SFLOAT:
+		case VK_FORMAT_R32G32B32_UINT:
+		case VK_FORMAT_R32G32B32_SINT:
+		case VK_FORMAT_R32G32B32_SFLOAT:
+		case VK_FORMAT_R32G32B32A32_UINT:
+		case VK_FORMAT_R32G32B32A32_SINT:
+		case VK_FORMAT_R32G32B32A32_SFLOAT:
+		case VK_FORMAT_R64_UINT:
+		case VK_FORMAT_R64_SINT:
+		case VK_FORMAT_R64_SFLOAT:
+		case VK_FORMAT_R64G64_UINT:
+		case VK_FORMAT_R64G64_SINT:
+		case VK_FORMAT_R64G64_SFLOAT:
+		case VK_FORMAT_R64G64B64_UINT:
+		case VK_FORMAT_R64G64B64_SINT:
+		case VK_FORMAT_R64G64B64_SFLOAT:
+		case VK_FORMAT_R64G64B64A64_UINT:
+		case VK_FORMAT_R64G64B64A64_SINT:
+		case VK_FORMAT_R64G64B64A64_SFLOAT:
+		case VK_FORMAT_R16_UNORM:
+		case VK_FORMAT_R16_SNORM:
+		case VK_FORMAT_R16_USCALED:
+		case VK_FORMAT_R16_SSCALED:
+		case VK_FORMAT_R16_UINT:
+		case VK_FORMAT_R16_SINT:
+		case VK_FORMAT_R16_SFLOAT:
+		case VK_FORMAT_R16G16_UNORM:
+		case VK_FORMAT_R16G16_SNORM:
+		case VK_FORMAT_R16G16_USCALED:
+		case VK_FORMAT_R16G16_SSCALED:
+		case VK_FORMAT_R16G16_UINT:
+		case VK_FORMAT_R16G16_SINT:
+		case VK_FORMAT_R16G16_SFLOAT:
+		case VK_FORMAT_R16G16B16_UNORM:
+		case VK_FORMAT_R16G16B16_SNORM:
+		case VK_FORMAT_R16G16B16_USCALED:
+		case VK_FORMAT_R16G16B16_SSCALED:
+		case VK_FORMAT_R16G16B16_UINT:
+		case VK_FORMAT_R16G16B16_SINT:
+		case VK_FORMAT_R16G16B16_SFLOAT:
+		case VK_FORMAT_R16G16B16A16_UNORM:
+		case VK_FORMAT_R16G16B16A16_SNORM:
+		case VK_FORMAT_R16G16B16A16_USCALED:
+		case VK_FORMAT_R16G16B16A16_SSCALED:
+		case VK_FORMAT_R16G16B16A16_UINT:
+		case VK_FORMAT_R16G16B16A16_SINT:
+		case VK_FORMAT_R16G16B16A16_SFLOAT:
+			layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_SUBOPTIMAL_TEXTURE_FORMAT,
+			           "Image is created with suboptimal texture format. Sampling a texture with this format won't be "
+			           "optimal on some devices. Please consult the PowerVR Documentation: https://docs.imgtec.com/");
+			break;
+		default:
+			break;
+		};
+	}
+
+	if (cfg.msgTextureLinearTiling && pCreateInfo->tiling == VK_IMAGE_TILING_LINEAR)
+	{
+		layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_TEXTURE_LINEAR_TILING,
+		           "Image is created with linear tiling. Sampling a texture with this tiling won't be optimal. Use "
+		           "optimal layout for images that are sampled. Use buffers for uploading image data.");
+	}
+
 	return res;
 }
 
@@ -738,6 +831,91 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateRenderPass(VkDevice device, const Vk
 			layer->getTable()->DestroyRenderPass(device, *pRenderPass, pAllocator);
 		}
 	}
+
+	for (int i = 0; i < pCreateInfo->dependencyCount; ++i)
+	{
+		VkSubpassDependency dep = pCreateInfo->pDependencies[i];
+		const auto &cfg = layer->getConfig();
+
+		if (cfg.msgSuboptimalSubpassDependencyFlag && dep.dependencyFlags != VK_DEPENDENCY_BY_REGION_BIT)
+		{
+			layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_SUBOPTIMAL_SUBPASS_DEPENDENCY_FLAG,
+			           "Suboptimal subpass dependency flag detected.");
+		}
+	}
+
+	for (uint32_t i = 0; i < pCreateInfo->dependencyCount; ++i)
+	{
+		VkSubpassDependency d = pCreateInfo->pDependencies[i];
+		
+		//external dependency
+		if(d.srcSubpass == -1 || d.dstSubpass == -1)	
+			continue;
+
+		VkSubpassDescription desc = pCreateInfo->pSubpasses[d.srcSubpass];
+		for (uint32_t j = 0; j < desc.inputAttachmentCount; ++j)
+		{
+			VkAttachmentReference ref = desc.pInputAttachments[j];
+
+			if (d.srcSubpass == d.dstSubpass //if dependency is a self dependency
+			    &&
+			    (d.srcAccessMask & VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT) &&
+			    (d.dstAccessMask & VK_ACCESS_INPUT_ATTACHMENT_READ_BIT))
+			{
+				//if input attachment is a stencil one
+				switch (pCreateInfo->pAttachments[ref.attachment].format)
+				{
+				case VK_FORMAT_S8_UINT:
+				case VK_FORMAT_D16_UNORM_S8_UINT:
+				case VK_FORMAT_D24_UNORM_S8_UINT:
+				case VK_FORMAT_D32_SFLOAT_S8_UINT:
+				{
+					const auto &cfg = layer->getConfig();
+					if (cfg.msgSubpassStencilSelfDependency)
+					{
+						layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
+									MESSAGE_CODE_SUBPASS_STENCIL_SELF_DEPENDENCY,
+									"Subpass detected with a stencil self dependency. This is causes bad "
+									"performance on certain devices.");
+					}
+
+					break;
+				}
+				default:
+					break;
+				};
+			}
+		}
+	}
+
+	for (int c = 0; c < pCreateInfo->attachmentCount; ++c)
+	{
+		switch (pCreateInfo->pAttachments[c].format)
+		{
+		case VK_FORMAT_D16_UNORM_S8_UINT:
+		case VK_FORMAT_D24_UNORM_S8_UINT:
+		case VK_FORMAT_D32_SFLOAT_S8_UINT:
+		{
+			if (pCreateInfo->pAttachments[c].loadOp !=
+					pCreateInfo->pAttachments[c].stencilLoadOp ||
+				pCreateInfo->pAttachments[c].storeOp !=
+					pCreateInfo->pAttachments[c].stencilStoreOp)
+			{
+				const auto &cfg = layer->getConfig();
+				if (cfg.msgInefficientDepthStencilOps)
+				{
+					layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_INEFFICIENT_DEPTH_STENCIL_OPS,
+							   "Dual depth/stencil renderpass attachment detected with different load/store "
+							   "ops. This will result in reduced performance on some devices");
+				}
+			}
+			break;
+		}
+		default:
+			break;
+		};
+	}
+
 	return res;
 }
 
@@ -751,7 +929,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device, V
 	void *key = getDispatchKey(device);
 	auto *layer = getLayerData(key, deviceData);
 
-	if (pipelineCache == VK_NULL_HANDLE)
+	const auto &cfg = layer->getConfig();
+	if (cfg.msgNoPipelineCache && pipelineCache == VK_NULL_HANDLE)
 	{
 		layer->log(
 		    VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_NO_PIPELINE_CACHE,
@@ -776,6 +955,14 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateGraphicsPipelines(VkDevice device, V
 					layer->getTable()->DestroyPipeline(device, pPipelines[j], pAllocator);
 				break;
 			}
+
+			if (cfg.msgPipelineOptimisationDisabled &&
+			    pCreateInfos[i].flags & VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT)
+			{
+				layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_PIPELINE_OPTIMISATION_DISABLED,
+				           "Creating a pipeline with optimisation disabled. This should only be done in debug or "
+				           "developer builds. Never in final release builds.");
+			}
 		}
 	}
 	return res;
@@ -791,7 +978,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateComputePipelines(VkDevice device, Vk
 	void *key = getDispatchKey(device);
 	auto *layer = getLayerData(key, deviceData);
 
-	if (pipelineCache == VK_NULL_HANDLE)
+	const auto &cfg = layer->getConfig();
+	if (cfg.msgNoPipelineCache && pipelineCache == VK_NULL_HANDLE)
 	{
 		layer->log(
 		    VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_NO_PIPELINE_CACHE,
@@ -815,6 +1003,14 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateComputePipelines(VkDevice device, Vk
 				for (uint32_t j = 0; j < createInfoCount; j++)
 					layer->getTable()->DestroyPipeline(device, pPipelines[j], pAllocator);
 				break;
+			}
+
+			if (cfg.msgPipelineOptimisationDisabled &&
+			    pCreateInfos[i].flags & VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT)
+			{
+				layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_PIPELINE_OPTIMISATION_DISABLED,
+				           "Creating a pipeline with optimisation disabled. This should only be done in debug or "
+				           "developer builds. Never in final release builds.");
 			}
 		}
 	}
@@ -957,12 +1153,16 @@ static VKAPI_ATTR void VKAPI_CALL CmdResolveImage(VkCommandBuffer commandBuffer,
 		});
 	}
 
-	// Using this function is always a really bad idea, flat out warn on any use of this function.
-	cmd->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_RESOLVE_IMAGE,
-	         "Attempting to use vkCmdResolveImage to resolve a multisampled image. "
-	         "This is a very slow and extremely bandwidth intensive path. "
-	         "You should always resolve multisampled images on-tile with pResolveAttachments in VkRenderPass. "
-	         "This is effectively \"free\" on Mali GPUs.");
+	const auto &cfg = layer->getConfig();
+	if (cfg.msgResolveImage)
+	{
+		// Using this function is always a really bad idea, flat out warn on any use of this function.
+		cmd->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_RESOLVE_IMAGE,
+		         "Attempting to use vkCmdResolveImage to resolve a multisampled image. "
+		         "This is a very slow and extremely bandwidth intensive path. "
+		         "You should always resolve multisampled images on-tile with pResolveAttachments in VkRenderPass. "
+		         "This is effectively \"free\" on PowerVR GPUs.");
+	}
 
 	layer->getTable()->CmdResolveImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount,
 	                                   pRegions);
@@ -1283,6 +1483,186 @@ static VKAPI_ATTR void VKAPI_CALL CmdBindPipeline(VkCommandBuffer commandBuffer,
 	cmdBuffer->bindPipeline(pipelineBindPoint, pipeline);
 }
 
+uint32_t getBPP(VkFormat format)
+{
+	switch (format)
+	{
+	case VK_FORMAT_R4G4_UNORM_PACK8:
+	case VK_FORMAT_R8_UNORM:
+	case VK_FORMAT_R8_SNORM:
+	case VK_FORMAT_R8_USCALED:
+	case VK_FORMAT_R8_SSCALED:
+	case VK_FORMAT_R8_UINT:
+	case VK_FORMAT_R8_SINT:
+	case VK_FORMAT_R8_SRGB:
+		return 8;
+	case VK_FORMAT_R4G4B4A4_UNORM_PACK16:
+	case VK_FORMAT_B4G4R4A4_UNORM_PACK16:
+	case VK_FORMAT_R5G6B5_UNORM_PACK16:
+	case VK_FORMAT_B5G6R5_UNORM_PACK16:
+	case VK_FORMAT_R5G5B5A1_UNORM_PACK16:
+	case VK_FORMAT_B5G5R5A1_UNORM_PACK16:
+	case VK_FORMAT_A1R5G5B5_UNORM_PACK16:
+	case VK_FORMAT_R8G8_UNORM:
+	case VK_FORMAT_R8G8_SNORM:
+	case VK_FORMAT_R8G8_USCALED:
+	case VK_FORMAT_R8G8_SSCALED:
+	case VK_FORMAT_R8G8_UINT:
+	case VK_FORMAT_R8G8_SINT:
+	case VK_FORMAT_R8G8_SRGB:
+	case VK_FORMAT_R16_UNORM:
+	case VK_FORMAT_R16_SNORM:
+	case VK_FORMAT_R16_USCALED:
+	case VK_FORMAT_R16_SSCALED:
+	case VK_FORMAT_R16_UINT:
+	case VK_FORMAT_R16_SINT:
+	case VK_FORMAT_R16_SFLOAT:
+	case VK_FORMAT_D16_UNORM:
+		return 16;
+	case VK_FORMAT_R8G8B8_UNORM:
+	case VK_FORMAT_R8G8B8_SNORM:
+	case VK_FORMAT_R8G8B8_USCALED:
+	case VK_FORMAT_R8G8B8_SSCALED:
+	case VK_FORMAT_R8G8B8_UINT:
+	case VK_FORMAT_R8G8B8_SINT:
+	case VK_FORMAT_R8G8B8_SRGB:
+	case VK_FORMAT_B8G8R8_UNORM:
+	case VK_FORMAT_B8G8R8_SNORM:
+	case VK_FORMAT_B8G8R8_USCALED:
+	case VK_FORMAT_B8G8R8_SSCALED:
+	case VK_FORMAT_B8G8R8_UINT:
+	case VK_FORMAT_B8G8R8_SINT:
+	case VK_FORMAT_B8G8R8_SRGB:
+		return 24;
+	case VK_FORMAT_R8G8B8A8_UNORM:
+	case VK_FORMAT_R8G8B8A8_SNORM:
+	case VK_FORMAT_R8G8B8A8_USCALED:
+	case VK_FORMAT_R8G8B8A8_SSCALED:
+	case VK_FORMAT_R8G8B8A8_UINT:
+	case VK_FORMAT_R8G8B8A8_SINT:
+	case VK_FORMAT_R8G8B8A8_SRGB:
+	case VK_FORMAT_B8G8R8A8_UNORM:
+	case VK_FORMAT_B8G8R8A8_SNORM:
+	case VK_FORMAT_B8G8R8A8_USCALED:
+	case VK_FORMAT_B8G8R8A8_SSCALED:
+	case VK_FORMAT_B8G8R8A8_UINT:
+	case VK_FORMAT_B8G8R8A8_SINT:
+	case VK_FORMAT_B8G8R8A8_SRGB:
+	case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
+	case VK_FORMAT_A8B8G8R8_SNORM_PACK32:
+	case VK_FORMAT_A8B8G8R8_USCALED_PACK32:
+	case VK_FORMAT_A8B8G8R8_SSCALED_PACK32:
+	case VK_FORMAT_A8B8G8R8_UINT_PACK32:
+	case VK_FORMAT_A8B8G8R8_SINT_PACK32:
+	case VK_FORMAT_A8B8G8R8_SRGB_PACK32:
+	case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+	case VK_FORMAT_A2R10G10B10_SNORM_PACK32:
+	case VK_FORMAT_A2R10G10B10_USCALED_PACK32:
+	case VK_FORMAT_A2R10G10B10_SSCALED_PACK32:
+	case VK_FORMAT_A2R10G10B10_UINT_PACK32:
+	case VK_FORMAT_A2R10G10B10_SINT_PACK32:
+	case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+	case VK_FORMAT_A2B10G10R10_SNORM_PACK32:
+	case VK_FORMAT_A2B10G10R10_USCALED_PACK32:
+	case VK_FORMAT_A2B10G10R10_SSCALED_PACK32:
+	case VK_FORMAT_A2B10G10R10_UINT_PACK32:
+	case VK_FORMAT_A2B10G10R10_SINT_PACK32:
+	case VK_FORMAT_R16G16_UNORM:
+	case VK_FORMAT_R16G16_SNORM:
+	case VK_FORMAT_R16G16_USCALED:
+	case VK_FORMAT_R16G16_SSCALED:
+	case VK_FORMAT_R16G16_UINT:
+	case VK_FORMAT_R16G16_SINT:
+	case VK_FORMAT_R16G16_SFLOAT:
+	case VK_FORMAT_R32_UINT:
+	case VK_FORMAT_R32_SINT:
+	case VK_FORMAT_R32_SFLOAT:
+	case VK_FORMAT_B10G11R11_UFLOAT_PACK32:
+	case VK_FORMAT_E5B9G9R9_UFLOAT_PACK32:
+	case VK_FORMAT_X8_D24_UNORM_PACK32:
+	case VK_FORMAT_D32_SFLOAT:
+		return 32;
+	case VK_FORMAT_R16G16B16_UNORM:
+	case VK_FORMAT_R16G16B16_SNORM:
+	case VK_FORMAT_R16G16B16_USCALED:
+	case VK_FORMAT_R16G16B16_SSCALED:
+	case VK_FORMAT_R16G16B16_UINT:
+	case VK_FORMAT_R16G16B16_SINT:
+	case VK_FORMAT_R16G16B16_SFLOAT:
+		return 48;
+	case VK_FORMAT_R16G16B16A16_UNORM:
+	case VK_FORMAT_R16G16B16A16_SNORM:
+	case VK_FORMAT_R16G16B16A16_USCALED:
+	case VK_FORMAT_R16G16B16A16_SSCALED:
+	case VK_FORMAT_R16G16B16A16_UINT:
+	case VK_FORMAT_R16G16B16A16_SINT:
+	case VK_FORMAT_R16G16B16A16_SFLOAT:
+	case VK_FORMAT_R32G32_UINT:
+	case VK_FORMAT_R32G32_SINT:
+	case VK_FORMAT_R32G32_SFLOAT:
+	case VK_FORMAT_R64_UINT:
+	case VK_FORMAT_R64_SINT:
+	case VK_FORMAT_R64_SFLOAT:
+		return 64;
+	case VK_FORMAT_R32G32B32_UINT:
+	case VK_FORMAT_R32G32B32_SINT:
+	case VK_FORMAT_R32G32B32_SFLOAT:
+		return 96;
+	case VK_FORMAT_R32G32B32A32_UINT:
+	case VK_FORMAT_R32G32B32A32_SINT:
+	case VK_FORMAT_R32G32B32A32_SFLOAT:
+	case VK_FORMAT_R64G64_UINT:
+	case VK_FORMAT_R64G64_SINT:
+	case VK_FORMAT_R64G64_SFLOAT:
+		return 128;
+	case VK_FORMAT_R64G64B64_UINT:
+	case VK_FORMAT_R64G64B64_SINT:
+	case VK_FORMAT_R64G64B64_SFLOAT:
+		return 192;
+	case VK_FORMAT_R64G64B64A64_UINT:
+	case VK_FORMAT_R64G64B64A64_SINT:
+	case VK_FORMAT_R64G64B64A64_SFLOAT:
+		return 256;
+	//special cases...
+	case VK_FORMAT_S8_UINT:
+	case VK_FORMAT_D16_UNORM_S8_UINT:
+	case VK_FORMAT_D24_UNORM_S8_UINT:
+	case VK_FORMAT_D32_SFLOAT_S8_UINT:
+	default:
+		return -1;
+	}
+}
+
+uint32_t getNumSamples(VkSampleCountFlagBits samples)
+{
+	if (samples & VK_SAMPLE_COUNT_64_BIT)
+	{
+		return 64;
+	}
+	if (samples & VK_SAMPLE_COUNT_32_BIT)
+	{
+		return 32;
+	}
+	if (samples & VK_SAMPLE_COUNT_16_BIT)
+	{
+		return 16;
+	}
+	if (samples & VK_SAMPLE_COUNT_8_BIT)
+	{
+		return 8;
+	}
+	if (samples & VK_SAMPLE_COUNT_4_BIT)
+	{
+		return 4;
+	}
+	if (samples & VK_SAMPLE_COUNT_2_BIT)
+	{
+		return 2;
+	}
+
+	return 1;
+}
+
 static VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass(VkCommandBuffer commandBuffer,
                                                      const VkRenderPassBeginInfo *pRenderPassBegin,
                                                      VkSubpassContents contents)
@@ -1295,8 +1675,82 @@ static VKAPI_ATTR void VKAPI_CALL CmdBeginRenderPass(VkCommandBuffer commandBuff
 	CommandBuffer *cmdBuffer = layer->get<CommandBuffer>(commandBuffer);
 	MPD_ASSERT(cmdBuffer);
 
+	VkFramebuffer lastFB = cmdBuffer->getLastFramebuffer();
+
 	layer->getTable()->CmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
 	cmdBuffer->beginRenderPass(pRenderPassBegin, contents);
+
+	VkFramebuffer currFB = cmdBuffer->getLastFramebuffer();
+
+	Framebuffer *fb = layer->get<Framebuffer>(currFB);
+
+	const auto &cfg = layer->getConfig();
+
+	if (cfg.msgNoFBCDC)
+	{
+		for (uint32_t c = 0; c < fb->getCreateInfo().attachmentCount; ++c)
+		{
+			ImageView *view = layer->get<ImageView>(fb->getCreateInfo().pAttachments[c]);
+			Image *image = layer->get<Image>(view->getCreateInfo().image);
+			VkFormat format = view->getCreateInfo().format;
+			uint32_t bpp = getBPP(format);
+			uint32_t samples = getNumSamples(image->getCreateInfo().samples);
+
+			//reflects current status on Vulkan for GM9446
+			if (samples > 1)
+			{
+				layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_NO_FBCDC,
+				           "We detected that a renderpass may not use framebuffer compression on certain devices.");
+			}
+			else
+			{
+				if (formatIsDepthOnly(format) || formatIsDepthStencil(format) || formatIsStencilOnly(format))
+				{
+					switch (format)
+					{
+					case VK_FORMAT_D16_UNORM:
+						layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_NO_FBCDC,
+								   "We detected that a renderpass may not use framebuffer compression on certain devices.");
+						break;
+					case VK_FORMAT_S8_UINT:
+						layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_NO_FBCDC,
+								   "We detected that a renderpass may not use framebuffer compression on certain devices.");
+						break;
+					case VK_FORMAT_D24_UNORM_S8_UINT:
+					case VK_FORMAT_X8_D24_UNORM_PACK32:
+					case VK_FORMAT_D32_SFLOAT:
+						break; //we good
+					default:
+						layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_NO_FBCDC,
+								   "We detected that a renderpass may not use framebuffer compression on certain devices.");
+						break;
+					}
+				}
+				else
+				{
+					switch (bpp)
+					{
+					case 8:
+					{
+						layer->log(
+							VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_NO_FBCDC,
+							"We detected that a renderpass may not use framebuffer compression on certain devices.");
+						break;
+					}
+					default:
+						break; //we good
+					}
+				}
+			}
+		}
+	}
+
+	if (cfg.msgPotentialSubpass && lastFB == currFB)
+	{
+		layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_POTENTIAL_SUBPASS,
+		           "We detected that two subsequent render passes use the same VkFramebuffer. They should be turned "
+		           "into subpasses instead.");
+	}
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents)
@@ -1512,8 +1966,38 @@ static VKAPI_ATTR void VKAPI_CALL CmdCopyQueryPoolResults(VkCommandBuffer comman
 	cmdBuffer->enqueueDeferredFunction(
 	    [=](Queue &queue) { queue.getQueueTracker().pushWork(QueueTracker::STAGE_TRANSFER); });
 
+	const auto &cfg = layer->getConfig();
+
+	if (cfg.msgQueryBundleTooSmall && queryCount < cfg.minQueryCount)
+	{
+		layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_QUERY_BUNDLE_TOO_SMALL,
+		           "Too few query objects are operated on at once, this may be ineffient on certain devices.");
+	}
+
+
 	layer->getTable()->CmdCopyQueryPoolResults(commandBuffer, queryPool, firstQuery, queryCount, dstBuffer, dstOffset,
 	                                           stride, flags);
+}
+
+static VKAPI_ATTR void VKAPI_CALL CmdResetQueryPool(VkCommandBuffer commandBuffer, VkQueryPool queryPool,
+                                                      uint32_t firstQuery, uint32_t queryCount)
+{
+	lock_guard<mutex> holder{ globalLock };
+	void *key = getDispatchKey(commandBuffer);
+	auto *layer = getLayerData(key, deviceData);
+
+	auto *cmdBuffer = layer->get<CommandBuffer>(commandBuffer);
+	MPD_ASSERT(cmdBuffer);
+
+	const auto &cfg = layer->getConfig();
+
+	if (cfg.msgQueryBundleTooSmall && queryCount < cfg.minQueryCount)
+	{
+		layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_QUERY_BUNDLE_TOO_SMALL,
+		           "Too few query objects are operated on at once, this may be ineffient on certain devices.");
+	}
+
+	layer->getTable()->CmdResetQueryPool(commandBuffer, queryPool, firstQuery, queryCount);
 }
 
 static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount,
@@ -1532,6 +2016,197 @@ static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(VkDevice device, uint32_t
 
 	layer->getTable()->UpdateDescriptorSets(device, descriptorWriteCount, pDescriptorWrites, descriptorCopyCount,
 	                                        pDescriptorCopies);
+
+	for (uint32_t i = 0; i < descriptorWriteCount; ++i)
+	{
+		switch (pDescriptorWrites[i].descriptorType)
+		{
+		case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+		case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+		case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+		{
+			auto *view = layer->get<MPD::ImageView>(pDescriptorWrites[i].pImageInfo->imageView);
+			auto *image = layer->get<MPD::Image>(view->getCreateInfo().image);
+
+			const auto &cfg = layer->getConfig();
+
+			uint32_t flags = 0;
+			for (auto c = view->getCreateInfo().subresourceRange.baseArrayLayer;
+			     c < view->getCreateInfo().subresourceRange.layerCount; ++c)
+			{
+				for (auto d = view->getCreateInfo().subresourceRange.baseMipLevel;
+				     d < view->getCreateInfo().subresourceRange.levelCount; ++d)
+				{
+					flags |= image->getUsageFlags(c, d);
+				}
+			}
+
+			bool isRenderTarget =
+			    flags & ((uint32_t)Image::Usage::RenderPassCleared | (uint32_t)Image::Usage::RenderPassDiscarded |
+			    (uint32_t)Image::Usage::RenderPassReadToTile | (uint32_t)Image::Usage::RenderPassStored);
+
+			bool usageRenderTarget = image->getCreateInfo().usage & (VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+			                               VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+
+			if (cfg.msgNonMipmappedTextureUsed)
+			{
+				if (view->getCreateInfo().subresourceRange.levelCount == 1 && !isRenderTarget && !usageRenderTarget)
+				{
+					layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_NON_MIPMAPPED_TEXTURE_USED,
+					           "Image view bound to descriptor set has no mip levels and is not a render target. "
+					           "Please use mipmapped textures.");
+				}
+			}
+
+			switch (view->getCreateInfo().format)
+			{
+			case VK_FORMAT_R4G4_UNORM_PACK8:
+			case VK_FORMAT_R4G4B4A4_UNORM_PACK16:
+			case VK_FORMAT_B4G4R4A4_UNORM_PACK16:
+			case VK_FORMAT_R5G6B5_UNORM_PACK16:
+			case VK_FORMAT_B5G6R5_UNORM_PACK16:
+			case VK_FORMAT_R5G5B5A1_UNORM_PACK16:
+			case VK_FORMAT_B5G5R5A1_UNORM_PACK16:
+			case VK_FORMAT_A1R5G5B5_UNORM_PACK16:
+			case VK_FORMAT_R8_UNORM:
+			case VK_FORMAT_R8_SNORM:
+			case VK_FORMAT_R8_USCALED:
+			case VK_FORMAT_R8_SSCALED:
+			case VK_FORMAT_R8_UINT:
+			case VK_FORMAT_R8_SINT:
+			case VK_FORMAT_R8_SRGB:
+			case VK_FORMAT_R8G8_UNORM:
+			case VK_FORMAT_R8G8_SNORM:
+			case VK_FORMAT_R8G8_USCALED:
+			case VK_FORMAT_R8G8_SSCALED:
+			case VK_FORMAT_R8G8_UINT:
+			case VK_FORMAT_R8G8_SINT:
+			case VK_FORMAT_R8G8_SRGB:
+			case VK_FORMAT_R8G8B8_UNORM:
+			case VK_FORMAT_R8G8B8_SNORM:
+			case VK_FORMAT_R8G8B8_USCALED:
+			case VK_FORMAT_R8G8B8_SSCALED:
+			case VK_FORMAT_R8G8B8_UINT:
+			case VK_FORMAT_R8G8B8_SINT:
+			case VK_FORMAT_R8G8B8_SRGB:
+			case VK_FORMAT_B8G8R8_UNORM:
+			case VK_FORMAT_B8G8R8_SNORM:
+			case VK_FORMAT_B8G8R8_USCALED:
+			case VK_FORMAT_B8G8R8_SSCALED:
+			case VK_FORMAT_B8G8R8_UINT:
+			case VK_FORMAT_B8G8R8_SINT:
+			case VK_FORMAT_B8G8R8_SRGB:
+			case VK_FORMAT_R8G8B8A8_UNORM:
+			case VK_FORMAT_R8G8B8A8_SNORM:
+			case VK_FORMAT_R8G8B8A8_USCALED:
+			case VK_FORMAT_R8G8B8A8_SSCALED:
+			case VK_FORMAT_R8G8B8A8_UINT:
+			case VK_FORMAT_R8G8B8A8_SINT:
+			case VK_FORMAT_R8G8B8A8_SRGB:
+			case VK_FORMAT_B8G8R8A8_UNORM:
+			case VK_FORMAT_B8G8R8A8_SNORM:
+			case VK_FORMAT_B8G8R8A8_USCALED:
+			case VK_FORMAT_B8G8R8A8_SSCALED:
+			case VK_FORMAT_B8G8R8A8_UINT:
+			case VK_FORMAT_B8G8R8A8_SINT:
+			case VK_FORMAT_B8G8R8A8_SRGB:
+			case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
+			case VK_FORMAT_A8B8G8R8_SNORM_PACK32:
+			case VK_FORMAT_A8B8G8R8_USCALED_PACK32:
+			case VK_FORMAT_A8B8G8R8_SSCALED_PACK32:
+			case VK_FORMAT_A8B8G8R8_UINT_PACK32:
+			case VK_FORMAT_A8B8G8R8_SINT_PACK32:
+			case VK_FORMAT_A8B8G8R8_SRGB_PACK32:
+			case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+			case VK_FORMAT_A2R10G10B10_SNORM_PACK32:
+			case VK_FORMAT_A2R10G10B10_USCALED_PACK32:
+			case VK_FORMAT_A2R10G10B10_SSCALED_PACK32:
+			case VK_FORMAT_A2R10G10B10_UINT_PACK32:
+			case VK_FORMAT_A2R10G10B10_SINT_PACK32:
+			case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+			case VK_FORMAT_A2B10G10R10_SNORM_PACK32:
+			case VK_FORMAT_A2B10G10R10_USCALED_PACK32:
+			case VK_FORMAT_A2B10G10R10_SSCALED_PACK32:
+			case VK_FORMAT_A2B10G10R10_UINT_PACK32:
+			case VK_FORMAT_A2B10G10R10_SINT_PACK32:
+			case VK_FORMAT_R16_UNORM:
+			case VK_FORMAT_R16_SNORM:
+			case VK_FORMAT_R16_USCALED:
+			case VK_FORMAT_R16_SSCALED:
+			case VK_FORMAT_R16_UINT:
+			case VK_FORMAT_R16_SINT:
+			case VK_FORMAT_R16_SFLOAT:
+			case VK_FORMAT_R16G16_UNORM:
+			case VK_FORMAT_R16G16_SNORM:
+			case VK_FORMAT_R16G16_USCALED:
+			case VK_FORMAT_R16G16_SSCALED:
+			case VK_FORMAT_R16G16_UINT:
+			case VK_FORMAT_R16G16_SINT:
+			case VK_FORMAT_R16G16_SFLOAT:
+			case VK_FORMAT_R16G16B16_UNORM:
+			case VK_FORMAT_R16G16B16_SNORM:
+			case VK_FORMAT_R16G16B16_USCALED:
+			case VK_FORMAT_R16G16B16_SSCALED:
+			case VK_FORMAT_R16G16B16_UINT:
+			case VK_FORMAT_R16G16B16_SINT:
+			case VK_FORMAT_R16G16B16_SFLOAT:
+			case VK_FORMAT_R16G16B16A16_UNORM:
+			case VK_FORMAT_R16G16B16A16_SNORM:
+			case VK_FORMAT_R16G16B16A16_USCALED:
+			case VK_FORMAT_R16G16B16A16_SSCALED:
+			case VK_FORMAT_R16G16B16A16_UINT:
+			case VK_FORMAT_R16G16B16A16_SINT:
+			case VK_FORMAT_R16G16B16A16_SFLOAT:
+			case VK_FORMAT_R32_UINT:
+			case VK_FORMAT_R32_SINT:
+			case VK_FORMAT_R32_SFLOAT:
+			case VK_FORMAT_R32G32_UINT:
+			case VK_FORMAT_R32G32_SINT:
+			case VK_FORMAT_R32G32_SFLOAT:
+			case VK_FORMAT_R32G32B32_UINT:
+			case VK_FORMAT_R32G32B32_SINT:
+			case VK_FORMAT_R32G32B32_SFLOAT:
+			case VK_FORMAT_R32G32B32A32_UINT:
+			case VK_FORMAT_R32G32B32A32_SINT:
+			case VK_FORMAT_R32G32B32A32_SFLOAT:
+			case VK_FORMAT_R64_UINT:
+			case VK_FORMAT_R64_SINT:
+			case VK_FORMAT_R64_SFLOAT:
+			case VK_FORMAT_R64G64_UINT:
+			case VK_FORMAT_R64G64_SINT:
+			case VK_FORMAT_R64G64_SFLOAT:
+			case VK_FORMAT_R64G64B64_UINT:
+			case VK_FORMAT_R64G64B64_SINT:
+			case VK_FORMAT_R64G64B64_SFLOAT:
+			case VK_FORMAT_R64G64B64A64_UINT:
+			case VK_FORMAT_R64G64B64A64_SINT:
+			case VK_FORMAT_R64G64B64A64_SFLOAT:
+			case VK_FORMAT_B10G11R11_UFLOAT_PACK32:
+			case VK_FORMAT_E5B9G9R9_UFLOAT_PACK32:
+			case VK_FORMAT_D16_UNORM:
+			case VK_FORMAT_X8_D24_UNORM_PACK32:
+			case VK_FORMAT_D32_SFLOAT:
+			case VK_FORMAT_S8_UINT:
+			case VK_FORMAT_D16_UNORM_S8_UINT:
+			case VK_FORMAT_D24_UNORM_S8_UINT:
+			case VK_FORMAT_D32_SFLOAT_S8_UINT:
+			{
+				if (cfg.msgUncompressedTextureUsed && !isRenderTarget && !usageRenderTarget)
+				{
+					layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_UNCOMPRESSED_TEXTURE_USED,
+					           "Image view bound to descriptor set has uncompressed format and is not a render target. "
+					           "Use compressed textures such as PVRTC, ASTC, ETC2 instead.");
+				}
+				break;
+			}
+			default:
+				break;
+			};
+		}
+		default:
+			break;
+		};
+	}
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdBindDescriptorSets(VkCommandBuffer commandBuffer,
@@ -1567,6 +2242,15 @@ static VKAPI_ATTR void VKAPI_CALL CmdDispatch(VkCommandBuffer commandBuffer, uin
 	    [=](Queue &queue) { queue.getQueueTracker().pushWork(QueueTracker::STAGE_COMPUTE); });
 	layer->getTable()->CmdDispatch(commandBuffer, x, y, z);
 	cmdBuffer->enqueueComputeDescriptorSetUsage();
+
+	const auto &cfg = layer->getConfig();
+	if (cfg.msgWorkgroupSizeDivisor && (x * y * z) % cfg.workgroupSizeDivisor != 0)
+	{
+		layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_WORKGROUP_SIZE_DIVISOR,
+		           "vkCmdDispatch called with a workgroup size that is not a multiple of %i. This will be suboptimal "
+		           "on some devices.",
+		           cfg.workgroupSizeDivisor);
+	}
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer,
@@ -1649,6 +2333,27 @@ static VKAPI_ATTR void VKAPI_CALL CmdClearAttachments(VkCommandBuffer commandBuf
 	auto *cmdBuffer = layer->get<CommandBuffer>(commandBuffer);
 	MPD_ASSERT(cmdBuffer);
 
+	Framebuffer *fb = layer->get<Framebuffer>(cmdBuffer->getLastFramebuffer());
+
+	MPD_ASSERT(fb);
+
+	const auto &cfg = layer->getConfig();
+
+	if (cfg.msgPartialClear)
+	{
+		for (uint32_t c = 0; c < rectCount; ++c)
+		{
+			if (pRects[c].rect.offset.x != 0 || pRects[c].rect.offset.y != 0 ||
+			    pRects[c].rect.extent.width != fb->getCreateInfo().width ||
+			    pRects[c].rect.extent.height != fb->getCreateInfo().height)
+			{
+				layer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_PARTIAL_CLEAR,
+				           "We detected that a clear command was submitted that doesn't cover the entire framebuffer "
+				           "extent. This will result in decreased performance on some devices.");
+			}
+		}
+	}
+
 	cmdBuffer->clearAttachments(attachmentCount, pAttachments, rectCount, pRects);
 	layer->getTable()->CmdClearAttachments(commandBuffer, attachmentCount, pAttachments, rectCount, pRects);
 }
@@ -1689,6 +2394,14 @@ static VKAPI_ATTR void VKAPI_CALL CmdDraw(VkCommandBuffer commandBuffer, uint32_
 	layer->getTable()->CmdDraw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
 	cmdBuffer->draw(vertexCount, instanceCount, firstVertex, firstInstance);
 	cmdBuffer->enqueueGraphicsDescriptorSetUsage();
+
+	const auto &cfg = layer->getConfig();
+	if (cfg.msgNonIndexedDrawCall && vertexCount * instanceCount > cfg.maxSmallDrawcallVertices)
+	{
+		cmdBuffer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_NON_INDEXED_DRAW_CALL,
+		               "vkCmdDraw is called with a lot of geometry. Consider using indexed draw calls instead (and "
+		               "sort the indices properly using https://github.com/zeux/meshoptimizer).");
+	}
 }
 
 static VKAPI_ATTR void VKAPI_CALL CmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
@@ -1881,7 +2594,9 @@ static PFN_vkVoidFunction interceptCoreDeviceCommand(const char *pName)
 		{ "vkCmdFillBuffer", reinterpret_cast<PFN_vkVoidFunction>(CmdFillBuffer) },
 		{ "vkCmdUpdateBuffer", reinterpret_cast<PFN_vkVoidFunction>(CmdUpdateBuffer) },
 		{ "vkCmdResolveImage", reinterpret_cast<PFN_vkVoidFunction>(CmdResolveImage) },
+
 		{ "vkCmdCopyQueryPoolResults", reinterpret_cast<PFN_vkVoidFunction>(CmdCopyQueryPoolResults) },
+		{ "vkCmdResetQueryPool", reinterpret_cast<PFN_vkVoidFunction>(CmdResetQueryPool) },
 
 		{ "vkCmdDispatch", reinterpret_cast<PFN_vkVoidFunction>(CmdDispatch) },
 		{ "vkCmdDispatchIndirect", reinterpret_cast<PFN_vkVoidFunction>(CmdDispatchIndirect) },
@@ -1946,7 +2661,7 @@ static PFN_vkVoidFunction interceptCoreDeviceCommand(const char *pName)
 			return cmd.proc;
 	return nullptr;
 }
-}
+} // namespace MPD
 
 using namespace MPD;
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, const char *pName)
@@ -1986,7 +2701,7 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instan
 }
 
 static const VkLayerProperties layerProps[] = {
-	{ VK_LAYER_ARM_mali_perf_doc, VK_MAKE_VERSION(1, 0, 32), 1, "ARM Mali PerfDoc" },
+	{ VK_LAYER_IMG_powervr_perf_doc, VK_MAKE_VERSION(1, 0, 0), 1, "IMG PowerVR PerfDoc" },
 };
 
 static const VkExtensionProperties layerExtensions[] = {

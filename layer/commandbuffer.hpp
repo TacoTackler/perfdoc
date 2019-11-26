@@ -103,6 +103,21 @@ public:
 	void enqueueGraphicsDescriptorSetUsage();
 	void enqueueComputeDescriptorSetUsage();
 
+	void setFramebuffer(VkFramebuffer fb)
+	{
+		lastFB = fb;
+	}
+
+	VkFramebuffer getLastFramebuffer()
+	{
+		return lastFB;
+	}
+
+	uint32_t getCurrentSubpassIndex()
+	{
+		return currentSubpassIndex;
+	}
+
 private:
 	void scanIndices(Buffer *buffer, VkDeviceSize indexOffset, VkIndexType indexType, uint32_t indexCount,
 	                 uint32_t firstIndex, bool primitiveRestart);
@@ -112,6 +127,8 @@ private:
 
 	std::vector<CommandBuffer *> executedCommandBuffers;
 	std::vector<std::function<void(Queue &)>> deferredFunctions;
+
+	VkFramebuffer lastFB;
 
 	Buffer *indexBuffer;
 	VkDeviceSize indexOffset;
@@ -147,4 +164,4 @@ private:
 	const PipelineLayout *graphicsLayout = nullptr;
 	const PipelineLayout *computeLayout = nullptr;
 };
-}
+} // namespace MPD

@@ -96,7 +96,7 @@ void Device::freeDescriptorSets(DescriptorPool *pool)
 		{
 			if (it->second->getPool() == pool)
 			{
-				map.erase(it);
+				it = map.erase(it);
 				break;
 			}
 
@@ -121,7 +121,7 @@ void Device::freeCommandBuffers(CommandPool *pool)
 		{
 			if (it->second->getCommandPool() == pool)
 			{
-				map.erase(it);
+				it = map.erase(it);
 				break;
 			}
 

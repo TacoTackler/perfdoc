@@ -35,12 +35,16 @@ endfunction(add_shader)
 
 add_shader(quad.vert quad.vert)
 add_shader(quad.frag quad.frag)
+add_shader(quad_no_output.frag quad_no_output.frag)
 add_shader(quad_sampler.frag quad_sampler.frag)
 add_shader(quad_no_attribs.vert quad_no_attribs.vert)
 
 add_shader(compute.wg.4.1.1.comp basic.comp -DWG_X=4 -DWG_Y=1 -DWG_Z=1)
 add_shader(compute.wg.4.1.3.comp basic.comp -DWG_X=4 -DWG_Y=1 -DWG_Z=3)
 add_shader(compute.wg.16.8.1.comp basic.comp -DWG_X=16 -DWG_Y=8 -DWG_Z=1)
+
+add_shader(compute.wg.32.1.1.comp basic.comp -DWG_X=32 -DWG_Y=1 -DWG_Z=1)
+add_shader(compute.wg.31.1.1.comp basic.comp -DWG_X=31 -DWG_Y=1 -DWG_Z=1)
 
 add_shader(compute.sampler.2d.8.8.1.comp sampler.comp -DWG_X=8 -DWG_Y=8 -DWG_Z=1 -DSAMPLER_2D)
 add_shader(compute.sampler.1d.64.1.1.comp sampler.comp -DWG_X=64 -DWG_Y=1 -DWG_Z=1 -DSAMPLER_1D)

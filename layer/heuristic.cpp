@@ -71,16 +71,20 @@ void DepthPrePassHeuristic::cmdEndRenderPass(VkCommandBuffer)
 	MPD_ASSERT((state & INSIDE_RENDERPASS) != 0u);
 	state &= ~INSIDE_RENDERPASS;
 
+	const auto &cfg = this->device->getConfig();
+
 	// check current heuristics and report findings (if any)
 	if ((state & (COLOR_ATTACHMENT | DEPTH_ATTACHMENT)) == (COLOR_ATTACHMENT | DEPTH_ATTACHMENT))
 	{
-		if ((numDrawCallsDepthOnly >= device->getConfig().depthPrePassNumDrawCalls) &&
+		if (
+		cfg.msgDepthPrePass &&
+		(numDrawCallsDepthOnly >= device->getConfig().depthPrePassNumDrawCalls) &&
 		    (numDrawCallsDepthEqual >= device->getConfig().depthPrePassNumDrawCalls))
 		{
 			this->commandBuffer->log(
 			    VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_DEPTH_PRE_PASS,
 			    "Detected possible rendering pattern using depth pre-pass. "
-			    "This is not recommended on Mali due to extra geometry pressure and CPU overhead. ");
+			    "This is not recommended on PowerVR due to extra geometry pressure and CPU overhead. ");
 		}
 	}
 }
@@ -184,6 +188,8 @@ void TileReadbackHeuristic::cmdBeginRenderPass(VkCommandBuffer commandBuffer,
 
 	auto &info = renderPass->getCreateInfo();
 
+	const auto &cfg = this->device->getConfig();
+
 	// Check if any attachments have LOAD operation on them.
 	for (uint32_t att = 0; att < info.attachmentCount; att++)
 	{
@@ -208,7 +214,7 @@ void TileReadbackHeuristic::cmdBeginRenderPass(VkCommandBuffer commandBuffer,
 			attachmentNeedsReadback = true;
 
 		// Using LOAD_OP_LOAD is generally a really bad idea, so flag the issue.
-		if (attachmentNeedsReadback)
+		if (cfg.msgTileReadback && attachmentNeedsReadback)
 		{
 			renderPass->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_TILE_READBACK,
 			                "Attachment #%u (fmt: %s) in render pass has begun with VK_ATTACHMENT_LOAD_OP_LOAD.\n"
@@ -273,6 +279,8 @@ void ClearAttachmentsHeuristic::cmdClearAttachments(VkCommandBuffer, uint32_t at
 {
 	auto &subpass = renderPassInfo->pSubpasses[currentSubpass];
 
+	const auto &cfg = this->device->getConfig();
+
 	uint32_t clearPixels = 0;
 	for (uint32_t i = 0; i < rectCount; i++)
 		clearPixels += pRects[i].layerCount * pRects[i].rect.extent.width * pRects[i].rect.extent.height;
@@ -292,7 +300,7 @@ void ClearAttachmentsHeuristic::cmdClearAttachments(VkCommandBuffer, uint32_t at
 			if (framebufferAttachment != VK_ATTACHMENT_UNUSED)
 			{
 				auto &info = renderPassInfo->pAttachments[framebufferAttachment];
-				if (info.loadOp == VK_ATTACHMENT_LOAD_OP_LOAD)
+				if (cfg.msgClearAttachmentsAfterLoad && info.loadOp == VK_ATTACHMENT_LOAD_OP_LOAD)
 				{
 					// Using ClearAttachments with LOAD is very fishy, why not just CLEAR to begin with?
 					commandBuffer->log(
@@ -303,7 +311,7 @@ void ClearAttachmentsHeuristic::cmdClearAttachments(VkCommandBuffer, uint32_t at
 					    colorAttachment, formatToString(info.format), clearPixels);
 				}
 
-				if (!hasSeenDrawCall && currentSubpass == 0)
+				if (cfg.msgClearAttachmentsNoDrawCall && !hasSeenDrawCall && currentSubpass == 0)
 				{
 					// Otherwise, if we haven't seen any draw call yet, clearing attachments sounds kinda redundant.
 					// A somewhat legitimate usage pattern is using CLEAR, doing some draw calls, and then only
@@ -325,7 +333,7 @@ void ClearAttachmentsHeuristic::cmdClearAttachments(VkCommandBuffer, uint32_t at
 			if (framebufferAttachment != VK_ATTACHMENT_UNUSED)
 			{
 				auto &info = renderPassInfo->pAttachments[framebufferAttachment];
-				if (info.loadOp == VK_ATTACHMENT_LOAD_OP_LOAD)
+				if (cfg.msgClearAttachmentsAfterLoad && info.loadOp == VK_ATTACHMENT_LOAD_OP_LOAD)
 				{
 					// Using ClearAttachments right after LOAD is redundant, applications should just CLEAR to begin with.
 					commandBuffer->log(
@@ -335,7 +343,7 @@ void ClearAttachmentsHeuristic::cmdClearAttachments(VkCommandBuffer, uint32_t at
 					    "vkCmdClearAttachments will create a clear quad of %u pixels.",
 					    formatToString(info.format), clearPixels);
 				}
-				else if (!hasSeenDrawCall && currentSubpass == 0)
+				else if (cfg.msgClearAttachmentsNoDrawCall && !hasSeenDrawCall && currentSubpass == 0)
 				{
 					// Otherwise, if we haven't seen any draw call yet, clearing attachments sounds kinda redundant.
 					// A somewhat legitimate usage pattern is using CLEAR, doing some draw calls, and then only
@@ -357,7 +365,7 @@ void ClearAttachmentsHeuristic::cmdClearAttachments(VkCommandBuffer, uint32_t at
 			if (framebufferAttachment != VK_ATTACHMENT_UNUSED)
 			{
 				auto &info = renderPassInfo->pAttachments[framebufferAttachment];
-				if (info.stencilLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD)
+				if (cfg.msgClearAttachmentsAfterLoad && info.stencilLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD)
 				{
 					// Using ClearAttachments right after LOAD is redundant, applications should just CLEAR to begin with.
 					commandBuffer->log(
@@ -367,7 +375,7 @@ void ClearAttachmentsHeuristic::cmdClearAttachments(VkCommandBuffer, uint32_t at
 					    "vkCmdClearAttachments will create a clear quad of %u pixels.",
 					    formatToString(info.format), clearPixels);
 				}
-				else if (!hasSeenDrawCall && currentSubpass == 0)
+				else if (cfg.msgClearAttachmentsNoDrawCall && !hasSeenDrawCall && currentSubpass == 0)
 				{
 					// Otherwise, if we haven't seen any draw call yet, clearing attachments sounds kinda redundant.
 					// A somewhat legitimate usage pattern is using CLEAR, doing some draw calls, and then only

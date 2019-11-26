@@ -148,7 +148,6 @@ void Pipeline::initGraphics(const uint32_t *vertCode, size_t vertSize, const uin
 	VkGraphicsPipelineCreateInfo inf = *createInfo;
 	inf.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	inf.pNext = nullptr;
-	inf.flags = 0;
 
 	VkPipelineShaderStageCreateInfo stageInfos[2] = {};
 	stageInfos[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -257,7 +256,8 @@ void Pipeline::initGraphics(const uint32_t *vertCode, size_t vertSize, const uin
 	}
 	else
 	{
-		colorAtt.colorWriteMask = ~0u;
+		colorAtt.colorWriteMask =
+		    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
 		colorState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 		colorState.attachmentCount = 1;
@@ -391,7 +391,8 @@ void Framebuffer::initDepthColor(const std::shared_ptr<Texture> &depthAttachment
 	MPD_ASSERT_RESULT(vkCreateRenderPass(device, &rpinf, nullptr, &renderPass));
 
 	VkImageView images[] = {
-		colorAttachment->view, depthAttachment->view,
+		colorAttachment->view,
+		depthAttachment->view,
 	};
 
 	// Create framebuffer
@@ -545,6 +546,74 @@ void Texture::initDepthStencil(uint32_t w, uint32_t h, VkFormat fmt, bool transi
 	MPD_ASSERT_RESULT(vkCreateImageView(device, &viewInfo, nullptr, &view));
 }
 
+VkAccessFlags getAccessMaskFromLayout(VkImageLayout layout)
+{
+	switch (layout)
+	{
+	case VK_IMAGE_LAYOUT_GENERAL:
+		return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+		       VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+		return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+		return VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+		return VK_ACCESS_TRANSFER_WRITE_BIT;
+	case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+		return VK_ACCESS_TRANSFER_READ_BIT;
+	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+		return VK_ACCESS_SHADER_READ_BIT;
+	case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
+		return VK_ACCESS_MEMORY_READ_BIT;
+	case VK_IMAGE_LAYOUT_PREINITIALIZED:
+		return VK_ACCESS_HOST_WRITE_BIT;
+	default:
+		return 0;
+	}
+}
+
+void setImageLayout(VkDevice device, VkQueue queue, VkImageLayout oldLayout,
+                        VkImageLayout newLayout,
+                        VkImage image, uint32_t baseMipLevel, uint32_t numMipLevels, uint32_t baseArrayLayer,
+                        uint32_t numArrayLayers, VkImageAspectFlags aspect)
+{
+	// No operation required: We don't have a layout transition
+	if (newLayout == oldLayout)
+	{
+		return;
+	} // No transition required
+
+	VkImageMemoryBarrier barrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+	barrier.image = image;
+	barrier.oldLayout = oldLayout;
+	barrier.newLayout = newLayout;
+	barrier.subresourceRange.baseArrayLayer = baseArrayLayer;
+	barrier.subresourceRange.baseMipLevel = baseMipLevel;
+	barrier.subresourceRange.layerCount = numArrayLayers;
+	barrier.subresourceRange.levelCount = numMipLevels;
+	barrier.subresourceRange.aspectMask = aspect;
+	barrier.srcQueueFamilyIndex = -1;
+	barrier.dstQueueFamilyIndex = -1;
+	barrier.dstAccessMask = getAccessMaskFromLayout(newLayout);
+	barrier.srcAccessMask = getAccessMaskFromLayout(oldLayout);
+
+	auto layoutTransitionCmdBuf = make_shared<CommandBuffer>(device);
+	layoutTransitionCmdBuf->initPrimary();
+
+	VkCommandBufferBeginInfo cbbi = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+	cbbi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	MPD_ASSERT_RESULT(vkBeginCommandBuffer(layoutTransitionCmdBuf->commandBuffer, &cbbi));
+	vkCmdPipelineBarrier(layoutTransitionCmdBuf->commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+	                     VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &barrier);
+	MPD_ASSERT_RESULT(vkEndCommandBuffer(layoutTransitionCmdBuf->commandBuffer));
+
+	VkSubmitInfo submit = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
+	submit.commandBufferCount = 1;
+	submit.pCommandBuffers = &layoutTransitionCmdBuf->commandBuffer;
+	vkQueueSubmit(queue, 1, &submit, VK_NULL_HANDLE);
+	vkQueueWaitIdle(queue);
+}
+
 void CommandBuffer::initPrimary()
 {
 	VkCommandPoolCreateInfo poolinf = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, nullptr,
@@ -643,4 +712,4 @@ void Buffer::init(size_t size, VkBufferUsageFlags usage, const VkPhysicalDeviceM
 		MPD_ASSERT(!"Not implemented ATM");
 	}
 }
-}
+} // namespace MPD

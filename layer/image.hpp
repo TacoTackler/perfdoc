@@ -60,14 +60,14 @@ public:
 
 	enum class Usage
 	{
-		Undefined,
-		RenderPassCleared,
-		RenderPassReadToTile,
-		Cleared,
-		ResourceRead,
-		ResourceWrite,
-		RenderPassStored,
-		RenderPassDiscarded
+		Undefined = 0,
+		RenderPassCleared = 1 << 0,
+		RenderPassReadToTile = 1 << 1,
+		Cleared = 1 << 2,
+		ResourceRead = 1 << 3,
+		ResourceWrite = 1 << 4,
+		RenderPassStored = 1 << 5,
+		RenderPassDiscarded = 1 << 6
 	};
 
 	void signalUsage(uint32_t arrayLayer, uint32_t mipLevel, Usage usage);
@@ -75,6 +75,7 @@ public:
 	void signalUsage(const VkImageSubresourceLayers &range, Usage usage);
 
 	Usage getLastUsage(uint32_t arrayLayer, uint32_t mipLevel) const;
+	uint32_t getUsageFlags(uint32_t arrayLayer, uint32_t mipLevel) const;
 
 private:
 	VkImage image = VK_NULL_HANDLE;
@@ -90,6 +91,7 @@ private:
 	struct MipLevel
 	{
 		Usage lastUsage = Usage::Undefined;
+		uint32_t usageFlags = 0;
 	};
 
 	struct Layer

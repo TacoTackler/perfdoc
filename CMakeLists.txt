@@ -22,13 +22,13 @@ cmake_minimum_required(VERSION 3.5)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_C_STANDARD 99)
 
-if (CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} MATCHES "Clang"))
+project(PowerVR-PerfDoc LANGUAGES CXX C)
+
+if ((${CMAKE_CXX_COMPILER_ID} MATCHES "GNU") OR (${CMAKE_CXX_COMPILER_ID} MATCHES "Clang"))
     set(PERFDOC_CXX_FLAGS -Wall -Wextra -Wno-missing-field-initializers)
 elseif(MSVC)
     set(PERFDOC_CXX_FLAGS /wd4244 /wd4996 /wd4800 /D_CRT_SECURE_NO_WARNINGS /DNOMINMAX)
 endif()
-
-project(Mali-PerfDoc LANGUAGES CXX C)
 
 enable_testing()
 set(PLATFORM png)

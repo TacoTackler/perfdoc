@@ -43,7 +43,10 @@ VkResult DeviceMemory::init(VkDeviceMemory memory_, const VkMemoryAllocateInfo &
 		}
 	}
 
-	if (allocInfo.allocationSize < baseDevice->getConfig().minDeviceAllocationSize)
+	const auto &cfg = this->getDevice()->getConfig();
+
+	if (cfg.msgSmallAllocation && 
+	allocInfo.allocationSize < baseDevice->getConfig().minDeviceAllocationSize)
 	{
 		log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_SMALL_ALLOCATION,
 		    "Allocating a VkDeviceMemory of size %llu. This is a very small allocation (current threshold is %llu "

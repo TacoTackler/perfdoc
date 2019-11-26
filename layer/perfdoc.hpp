@@ -40,11 +40,11 @@
 			std::terminate();  \
 	} while (0)
 
-#define VK_LAYER_ARM_mali_perf_doc "VK_LAYER_ARM_mali_perf_doc"
+#define VK_LAYER_IMG_powervr_perf_doc "VK_LAYER_IMG_powervr_perf_doc"
 
 #ifdef ANDROID
 #include <android/log.h>
-#define MPD_LOG(...) __android_log_print(ANDROID_LOG_DEBUG, "MaliPerfDoc", __VA_ARGS__)
+#define MPD_LOG(...) __android_log_print(ANDROID_LOG_DEBUG, "PowerVRPerfDoc", __VA_ARGS__)
 #else
 #define MPD_LOG(...) fprintf(stderr, __VA_ARGS__)
 #endif

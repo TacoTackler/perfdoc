@@ -78,6 +78,8 @@ void CommandBuffer::reset()
 	computeDescriptorSets.resize(maxSets);
 	graphicsLayout = nullptr;
 	computeLayout = nullptr;
+
+	lastFB = 0;
 }
 
 void CommandBuffer::enqueueComputeDescriptorSetUsage()
@@ -337,6 +339,8 @@ void CommandBuffer::beginRenderPass(const VkRenderPassBeginInfo *pRenderPassBegi
 		tracker.pipelineBarrier(QueueTracker::STAGE_GEOMETRY_BIT, QueueTracker::STAGE_FRAGMENT_BIT);
 		tracker.pushWork(QueueTracker::STAGE_FRAGMENT);
 	});
+
+	setFramebuffer(pRenderPassBegin->framebuffer);
 }
 
 void CommandBuffer::endRenderPass()
@@ -421,7 +425,9 @@ void CommandBuffer::drawIndexed(uint32_t indexCount, uint32_t instanceCount, uin
 	const auto &cfg = baseDevice->getConfig();
 	if ((indexCount * instanceCount) <= cfg.smallIndexedDrawcallIndices)
 	{
-		if (++smallIndexedDrawcallCount == cfg.maxSmallIndexedDrawcalls)
+		if (
+		cfg.msgManySmallIndexedDrawcalls &&
+		++smallIndexedDrawcallCount == cfg.maxSmallIndexedDrawcalls)
 		{
 			log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_MANY_SMALL_INDEXED_DRAWCALLS,
 			    "The command buffer contains many small indexed drawcalls "
@@ -460,6 +466,8 @@ void CommandBuffer::scanIndices(Buffer *buffer, VkDeviceSize indexOffset, VkInde
 
 	const DeviceMemory *deviceMemory = buffer->getDeviceMemory();
 	MPD_ASSERT(deviceMemory);
+
+	const auto &cfg = this->getDevice()->getConfig();
 
 	const void *indexData = deviceMemory->getMappedMemory();
 	if (indexData)
@@ -513,7 +521,8 @@ void CommandBuffer::scanIndices(Buffer *buffer, VkDeviceSize indexOffset, VkInde
 
 		// We already know that this is going to be sparse.
 		// To potentially avoid an explosion in memory, just exit early.
-		if (maxValue - minValue >= indexCount)
+		if (cfg.msgIndexBufferSparse &&
+		maxValue - minValue >= indexCount)
 		{
 			buffer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_INDEX_BUFFER_SPARSE,
 			            "Indexbuffer data used by drawcall is fragmented. Number of indices (%u) is smaller than range "
@@ -566,14 +575,17 @@ void CommandBuffer::scanIndices(Buffer *buffer, VkDeviceSize indexOffset, VkInde
 		}
 
 		float utilization = float(verticesReferenced) / float(maxValue - minValue + 1);
-		if (utilization < baseDevice->getConfig().indexBufferUtilizationThreshold)
+		if (cfg.msgIndexBufferSparse &&
+		utilization < baseDevice->getConfig().indexBufferUtilizationThreshold)
 		{
 			buffer->log(VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_INDEX_BUFFER_SPARSE,
 			            "Indexbuffer data used by drawcall is fragmented: [%s]", fragmentation);
 		}
 
 		float cacheHitRate = float(verticesReferenced) / float(vertexShadeCount);
-		if (cacheHitRate <= baseDevice->getConfig().indexBufferCacheHitThreshold)
+		if (
+		cfg.msgIndexBufferCacheThrashing &&
+		cacheHitRate <= baseDevice->getConfig().indexBufferCacheHitThreshold)
 		{
 			buffer->log(
 			    VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT, MESSAGE_CODE_INDEX_BUFFER_CACHE_THRASHING,

@@ -28,12 +28,16 @@ using namespace std;
 namespace MPD
 {
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT, uint64_t, size_t,
-                                                    int32_t messageCode, const char *pLayerPrefix, const char *, void *pUserData)
+                                                    int32_t messageCode, const char *pLayerPrefix, const char * message, void *pUserData)
 {
-	if (flags == VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT && !strcmp(pLayerPrefix, "MaliPerfDoc"))
+	if (flags == VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT && !strcmp(pLayerPrefix, "PowerVRPerfDoc"))
 	{
 		MPD_ASSERT(messageCode >= 0 && messageCode < MESSAGE_CODE_COUNT);
 		static_cast<VulkanTestHelper *>(pUserData)->notifyCallback(static_cast<MessageCodes>(messageCode));
+	}
+	else if (flags == VK_DEBUG_REPORT_ERROR_BIT_EXT && !strcmp(pLayerPrefix, "Validation"))
+	{
+		throw std::string(message);
 	}
 	return VK_FALSE;
 }
@@ -80,7 +84,7 @@ VulkanTestHelper::VulkanTestHelper()
 	bool hasPerfDocLayer = false;
 	for (auto &layer : instanceLayers)
 	{
-		if (strcmp(layer.layerName, VK_LAYER_ARM_mali_perf_doc) == 0)
+		if (strcmp(layer.layerName, VK_LAYER_IMG_powervr_perf_doc) == 0)
 		{
 			hasPerfDocLayer = true;
 			break;
@@ -105,11 +109,12 @@ VulkanTestHelper::VulkanTestHelper()
 	const char *ext = VK_EXT_DEBUG_REPORT_EXTENSION_NAME;
 	instanceInfo.enabledExtensionCount = 1;
 	instanceInfo.ppEnabledExtensionNames = &ext;
-	const char *layer = VK_LAYER_ARM_mali_perf_doc;
-	instanceInfo.enabledLayerCount = 1;
-	instanceInfo.ppEnabledLayerNames = &layer;
+	const char* layer[] = {VK_LAYER_IMG_powervr_perf_doc, "VK_LAYER_KHRONOS_validation"};
+	instanceInfo.enabledLayerCount = 2;
+	instanceInfo.ppEnabledLayerNames = layer;
 
-	if (vkCreateInstance(&instanceInfo, nullptr, &instance) != VK_SUCCESS)
+	VkResult res;
+	if ((res = vkCreateInstance(&instanceInfo, nullptr, &instance)) != VK_SUCCESS)
 		throw runtime_error("Failed to create instance.");
 
 	if (!vulkanSymbolWrapperLoadCoreInstanceSymbols(instance))
@@ -148,7 +153,7 @@ VulkanTestHelper::VulkanTestHelper()
 	hasPerfDocLayer = false;
 	for (auto &layer : deviceLayers)
 	{
-		if (strcmp(layer.layerName, VK_LAYER_ARM_mali_perf_doc) == 0)
+		if (strcmp(layer.layerName, VK_LAYER_IMG_powervr_perf_doc) == 0)
 		{
 			hasPerfDocLayer = true;
 			break;
@@ -182,8 +187,8 @@ VulkanTestHelper::VulkanTestHelper()
 	VkDeviceCreateInfo deviceInfo = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
 	deviceInfo.queueCreateInfoCount = 1;
 	deviceInfo.pQueueCreateInfos = &queueInfo;
-	deviceInfo.enabledLayerCount = 1;
-	deviceInfo.ppEnabledLayerNames = &layer;
+	deviceInfo.enabledLayerCount = 2;
+	deviceInfo.ppEnabledLayerNames = (const char**)&layer;
 	deviceInfo.pEnabledFeatures = &features;
 
 	if (vkCreateDevice(gpu, &deviceInfo, nullptr, &device) != VK_SUCCESS)
@@ -193,9 +198,6 @@ VulkanTestHelper::VulkanTestHelper()
 		throw runtime_error("Failed to load device symbols.");
 
 	vkGetDeviceQueue(device, queueIndex, 0, &queue);
-
-	if (!initialize())
-		throw runtime_error("Failed to initialize test.");
 }
 
 void VulkanTestHelper::resetCounts()
@@ -237,6 +239,9 @@ int main()
 	auto *test = MPD::createTest();
 	if (!test)
 		return 1;
+
+	if (!test->initialize())
+		throw runtime_error("Failed to initialize test.");
 
 	bool result = test->runTest();
 	if (result)

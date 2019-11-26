@@ -21,7 +21,10 @@
 #include "perfdoc.hpp"
 #include "util.hpp"
 #include "vulkan_test.hpp"
+#include <functional>
+#include <memory>
 using namespace MPD;
+using namespace std;
 
 class Compute : public VulkanTestHelper
 {
@@ -31,6 +34,34 @@ class Compute : public VulkanTestHelper
 		Unaligned,
 		Large
 	};
+
+	bool checkWorkGroupSizeDivisible(bool positiveTest)
+	{
+		resetCounts();
+
+		static const uint32_t badCode[] =
+#include "compute.wg.31.1.1.comp.inc"
+		    ;
+
+		static const uint32_t goodCode[] =
+#include "compute.wg.32.1.1.comp.inc"
+		    ;
+
+		auto pipeline = make_shared<Pipeline>(device);
+		if (positiveTest)
+		{
+			pipeline->initCompute(badCode, sizeof(badCode));
+		}
+		else
+		{
+			pipeline->initCompute(goodCode, sizeof(goodCode));
+		}
+
+		if (getCount(MESSAGE_CODE_WORKGROUP_SIZE_DIVISOR) != 0)
+			return false;
+
+		return true;
+	}
 
 	bool checkWorkGroupSize(Test test)
 	{
@@ -47,17 +78,17 @@ class Compute : public VulkanTestHelper
 #include "compute.wg.16.8.1.comp.inc"
 		    ;
 
-		Pipeline ppline(device);
+		auto pipeline = make_shared<Pipeline>(device);
 		switch (test)
 		{
 		case Test::Aligned:
-			ppline.initCompute(alignedCode, sizeof(alignedCode));
+			pipeline->initCompute(alignedCode, sizeof(alignedCode));
 			break;
 		case Test::Unaligned:
-			ppline.initCompute(unalignedCode, sizeof(unalignedCode));
+			pipeline->initCompute(unalignedCode, sizeof(unalignedCode));
 			break;
 		case Test::Large:
-			ppline.initCompute(largeGroup, sizeof(largeGroup));
+			pipeline->initCompute(largeGroup, sizeof(largeGroup));
 			break;
 		}
 
@@ -124,8 +155,8 @@ class Compute : public VulkanTestHelper
 			break;
 		}
 
-		Pipeline ppline(device);
-		ppline.initCompute(code, size);
+		auto pipeline = make_shared<Pipeline>(device);
+		pipeline->initCompute(code, size);
 
 		switch (test)
 		{
@@ -148,6 +179,11 @@ class Compute : public VulkanTestHelper
 
 	bool runTest()
 	{
+		if (!checkWorkGroupSizeDivisible(true))
+			return false;
+		if (!checkWorkGroupSizeDivisible(false))
+			return false;
+
 		if (!checkWorkGroupSize(Test::Aligned))
 			return false;
 		if (!checkWorkGroupSize(Test::Unaligned))

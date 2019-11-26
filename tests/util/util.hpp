@@ -43,6 +43,10 @@ static inline uint32_t ctz(uint32_t v)
 #endif
 }
 
+void setImageLayout(VkDevice device, VkQueue queue, VkImageLayout oldLayout, VkImageLayout newLayout,
+                    VkImage image, uint32_t baseMipLevel, uint32_t numMipLevels, uint32_t baseArrayLayer,
+                    uint32_t numArrayLayers, VkImageAspectFlags aspect);
+
 struct TestObjectBase
 {
 	VkDevice device;
